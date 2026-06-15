@@ -33,7 +33,7 @@ def setup_chinese_font():
 setup_chinese_font()
 
 
-def detect_outliers_iqr(data: np.ndarray, k: float = 1.5) -> Tuple[np.ndarray, float, float, float, float]:
+def detect_outliers_iqr(data: np.ndarray, k: float = 1.5) -> Tuple[np.ndarray, np.ndarray, float, float, float, float, float]:
     """
     使用 IQR 方法检测异常值
 
@@ -42,22 +42,28 @@ def detect_outliers_iqr(data: np.ndarray, k: float = 1.5) -> Tuple[np.ndarray, f
         k: 异常值系数，默认为 1.5
 
     Returns:
-        异常值数组, Q1, Q3, IQR, 下界, 上界
+        异常值数组, 异常值索引数组, Q1, Q3, IQR, 下界, 上界
     """
-    data = np.asarray(data)
-    data = data[~np.isnan(data)]
+    data = np.asarray(data, dtype=float)
+    valid_mask = ~np.isnan(data)
+    valid_data = data[valid_mask]
 
-    if len(data) == 0:
-        return np.array([]), 0, 0, 0, 0, 0
+    if len(valid_data) == 0:
+        return np.array([]), np.array([]), 0.0, 0.0, 0.0, 0.0, 0.0
 
-    q1 = np.percentile(data, 25)
-    q3 = np.percentile(data, 75)
+    q1 = float(np.percentile(valid_data, 25))
+    q3 = float(np.percentile(valid_data, 75))
     iqr = q3 - q1
     lower_bound = q1 - k * iqr
     upper_bound = q3 + k * iqr
 
-    outliers = data[(data < lower_bound) | (data > upper_bound)]
-    return outliers, q1, q3, iqr, lower_bound, upper_bound
+    outlier_mask = (valid_data < lower_bound) | (valid_data > upper_bound)
+    outliers = valid_data[outlier_mask]
+
+    valid_indices = np.where(valid_mask)[0]
+    outlier_indices = valid_indices[outlier_mask]
+
+    return outliers, outlier_indices, q1, q3, iqr, lower_bound, upper_bound
 
 
 def get_outlier_indices(data: np.ndarray, k: float = 1.5) -> np.ndarray:
@@ -71,14 +77,7 @@ def get_outlier_indices(data: np.ndarray, k: float = 1.5) -> np.ndarray:
     Returns:
         异常值索引数组
     """
-    data = np.asarray(data)
-    q1 = np.percentile(data, 25)
-    q3 = np.percentile(data, 75)
-    iqr = q3 - q1
-    lower_bound = q1 - k * iqr
-    upper_bound = q3 + k * iqr
-
-    indices = np.where((data < lower_bound) | (data > upper_bound))[0]
+    _, indices, _, _, _, _, _ = detect_outliers_iqr(data, k)
     return indices
 
 
@@ -122,7 +121,11 @@ def generate_boxplot(
     outliers_list = []
 
     for i, col_data in enumerate(data_array):
-        outliers, q1, q3, iqr, lower_bound, upper_bound = detect_outliers_iqr(col_data)
+        outliers, outlier_indices, q1, q3, iqr, lower_bound, upper_bound = detect_outliers_iqr(col_data)
+        outlier_details = [
+            {'index': int(idx), 'value': float(val)}
+            for idx, val in zip(outlier_indices, outliers)
+        ]
         stats = {
             'column': column_names[i],
             'count': len(col_data),
@@ -135,6 +138,8 @@ def generate_boxplot(
             'lower_bound': float(lower_bound),
             'upper_bound': float(upper_bound),
             'outliers': outliers.tolist(),
+            'outlier_indices': outlier_indices.tolist(),
+            'outlier_details': outlier_details,
             'outlier_count': len(outliers)
         }
         stats_list.append(stats)

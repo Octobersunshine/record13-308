@@ -1,6 +1,7 @@
 import argparse
 import sys
 import json
+import numpy as np
 from boxplot_generator import generate_boxplot, parse_csv, parse_excel, detect_outliers_iqr
 
 
@@ -64,7 +65,11 @@ def main():
                 print(f"    正常范围: [{stats['lower_bound']:.2f}, {stats['upper_bound']:.2f}]")
                 print(f"    异常值: {stats['outlier_count']} 个")
                 if stats['outlier_count'] > 0:
-                    print(f"    异常值列表: {[round(x, 2) for x in stats['outliers']]}")
+                    details = ', '.join(
+                        f"行{detail['index']}={detail['value']:.2f}"
+                        for detail in stats['outlier_details']
+                    )
+                    print(f"    异常值详情: {details}")
 
             print(f"\n📈 总异常值数量: {result['total_outliers']}")
             print(f"🖼️  图片已保存至: {result['image_path']}")
@@ -90,11 +95,12 @@ def main():
                 print(f"可用的数值列: {', '.join(numeric_cols)}")
                 sys.exit(1)
 
-            col_data = df[args.column].dropna().values
-            outliers, q1, q3, iqr, lower_bound, upper_bound = detect_outliers_iqr(col_data, args.k)
+            col_data = df[args.column].values
+            outliers, outlier_indices, q1, q3, iqr, lower_bound, upper_bound = detect_outliers_iqr(col_data, args.k)
+            valid_count = len(col_data[~np.isnan(col_data)])
 
             print(f"\n📊 列 '{args.column}' 异常值分析 (k={args.k}):")
-            print(f"  数据量: {len(col_data)}")
+            print(f"  有效数据量: {valid_count}")
             print(f"  Q1 (25%分位数): {q1:.4f}")
             print(f"  Q3 (75%分位数): {q3:.4f}")
             print(f"  IQR (四分位距): {iqr:.4f}")
@@ -102,7 +108,11 @@ def main():
             print(f"  上界 (Q3 + {args.k}×IQR): {upper_bound:.4f}")
             print(f"  异常值数量: {len(outliers)}")
             if len(outliers) > 0:
-                print(f"  异常值列表: {sorted([round(x, 4) for x in outliers])}")
+                details = ', '.join(
+                    f"行{int(idx)}={float(val):.4f}"
+                    for idx, val in zip(outlier_indices, outliers)
+                )
+                print(f"  异常值详情: {details}")
             else:
                 print("  ✅ 未检测到异常值")
 

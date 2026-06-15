@@ -166,8 +166,12 @@ def analyze_outliers():
         if column not in df.columns:
             return jsonify({'error': f'列 {column} 不存在'}), 400
 
-        col_data = df[column].dropna().values
-        outliers, q1, q3, iqr, lower_bound, upper_bound = detect_outliers_iqr(col_data, k)
+        col_data = df[column].values
+        outliers, outlier_indices, q1, q3, iqr, lower_bound, upper_bound = detect_outliers_iqr(col_data, k)
+        outlier_details = [
+            {'index': int(idx), 'value': float(val)}
+            for idx, val in zip(outlier_indices, outliers)
+        ]
 
         return jsonify({
             'success': True,
@@ -178,6 +182,8 @@ def analyze_outliers():
             'lower_bound': float(lower_bound),
             'upper_bound': float(upper_bound),
             'outliers': outliers.tolist(),
+            'outlier_indices': outlier_indices.tolist(),
+            'outlier_details': outlier_details,
             'outlier_count': len(outliers),
             'k': k
         })
