@@ -162,21 +162,32 @@ def generate_boxplot(
         patch.set_edgecolor('darkblue')
         patch.set_linewidth(1.5)
 
+    all_data = np.concatenate([d for d in data_array if len(d) > 0])
+    data_range = np.max(all_data) - np.min(all_data) if len(all_data) > 0 else 1
+
     for i, outliers in enumerate(outliers_list):
-        if len(outliers) > 0:
-            for outlier_val in outliers:
-                outlier_indices = np.where(np.array(data_array[i]) == outlier_val)[0]
-                for _ in outlier_indices:
-                    ax.annotate(
-                        f'{outlier_val:.2f}',
-                        xy=(i + 1, outlier_val),
-                        xytext=(15, 0),
-                        textcoords='offset points',
-                        fontsize=9,
-                        color='red',
-                        fontweight='bold',
-                        bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7)
-                    )
+        outlier_count = len(outliers)
+        if outlier_count > 0:
+            col_data = data_array[i]
+            
+            y_max = np.max(col_data)
+            
+            ax.text(
+                i + 1,
+                y_max + data_range * 0.03,
+                f'! {outlier_count}个异常值',
+                ha='center',
+                va='bottom',
+                fontsize=10,
+                color='#dc2626',
+                fontweight='bold',
+                bbox=dict(
+                    boxstyle='round,pad=0.4',
+                    facecolor='#fef2f2',
+                    edgecolor='#fca5a5',
+                    alpha=0.9
+                )
+            )
 
     ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
     ax.set_ylabel('Value', fontsize=12, fontweight='bold')
