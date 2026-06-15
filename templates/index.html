@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>箱线图生成服务 - 异常值检测 (1.5×IQR)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.4rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card h2::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 2px;
+        }
+
+        .upload-area {
+            border: 3px dashed #cbd5e1;
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8fafc;
+        }
+
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #667eea;
+            background: #eef2ff;
+        }
+
+        .upload-area input[type="file"] {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .upload-text {
+            color: #64748b;
+            font-size: 1rem;
+        }
+
+        .upload-text strong {
+            color: #667eea;
+        }
+
+        .file-info {
+            background: #f1f5f9;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .file-info.show {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #475569;
+            font-weight: 600;
+        }
+
+        .form-group input[type="text"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .columns-container {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .column-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            margin-bottom: 5px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .column-item:hover {
+            background: #e2e8f0;
+        }
+
+        .column-item input[type="checkbox"] {
+            margin-right: 10px;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .column-item label {
+            cursor: pointer;
+            flex: 1;
+            margin: 0;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #f1f5f9;
+            color: #475569;
+        }
+
+        .btn-secondary:hover {
+            background: #e2e8f0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .preview-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 0.85rem;
+        }
+
+        .preview-table th, .preview-table td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .preview-table th {
+            background: #f1f5f9;
+            font-weight: 600;
+        }
+
+        .result-area {
+            display: none;
+        }
+
+        .result-area.show {
+            display: block;
+        }
+
+        .result-image {
+            width: 100%;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .stats-card {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border-left: 4px solid #0ea5e9;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .stats-card h4 {
+            color: #0369a1;
+            margin-bottom: 8px;
+        }
+
+        .stats-card p {
+            color: #334155;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .outlier-badge {
+            display: inline-block;
+            background: #fef2f2;
+            color: #dc2626;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-top: 5px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .alert-error {
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+        }
+
+        .alert-success {
+            background: #f0fdf4;
+            color: #15803d;
+            border: 1px solid #bbf7d0;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            cursor: pointer;
+            color: #475569;
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .supported-formats {
+            margin-top: 10px;
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 箱线图生成服务</h1>
+            <p>上传数据文件，自动生成箱线图并标记异常值（基于 1.5×IQR 规则）</p>
+        </header>
+
+        <div class="main-content">
+            <div class="card">
+                <h2>数据上传</h2>
+
+                <div id="alert-error" class="alert alert-error"></div>
+                <div id="alert-success" class="alert alert-success"></div>
+
+                <div class="upload-area" id="uploadArea">
+                    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.txt">
+                    <div class="upload-icon">📁</div>
+                    <div class="upload-text">
+                        点击或拖拽文件到此处<br>
+                        <strong>选择文件</strong> 上传数据
+                    </div>
+                    <div class="supported-formats">
+                        支持格式: CSV, Excel (.xlsx, .xls), TXT | 最大 50MB
+                    </div>
+                </div>
+
+                <div class="file-info" id="fileInfo">
+                    <strong>文件名:</strong> <span id="fileName"></span><br>
+                    <strong>数据行数:</strong> <span id="rowCount"></span><br>
+                    <strong>数值列数:</strong> <span id="colCount"></span>
+                </div>
+
+                <div id="columnsSection" style="display: none; margin-top: 20px;">
+                    <div class="form-group">
+                        <label>选择要分析的数值列</label>
+                        <div class="columns-container" id="columnsContainer"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="chartTitle">图表标题</label>
+                        <input type="text" id="chartTitle" value="箱线图 - 异常值检测 (1.5×IQR)">
+                    </div>
+
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="showStats" checked>
+                        <label for="showStats">显示统计信息</label>
+                    </div>
+
+                    <button class="btn" id="generateBtn" onclick="generateBoxplot()">
+                        📈 生成箱线图
+                    </button>
+                </div>
+
+                <div class="preview-table-container" id="previewSection" style="display: none; margin-top: 20px;">
+                    <h3 style="color: #475569; margin-bottom: 10px;">数据预览（前 10 行）</h3>
+                    <div style="overflow-x: auto;">
+                        <table class="preview-table" id="previewTable"></table>
+                    </div>
+                </div>
+
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>正在生成箱线图，请稍候...</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>生成结果</h2>
+
+                <div class="result-area" id="resultArea">
+                    <img id="resultImage" class="result-image" alt="箱线图">
+
+                    <div class="action-buttons">
+                        <button class="btn btn-secondary" onclick="downloadImage()">
+                            ⬇️ 下载图片
+                        </button>
+                        <button class="btn btn-secondary" onclick="downloadStats()">
+                            📋 下载统计数据
+                        </button>
+                    </div>
+
+                    <div id="statsContainer" style="margin-top: 20px;"></div>
+                </div>
+
+                <div id="emptyState" style="text-align: center; padding: 60px 20px; color: #94a3b8;">
+                    <div style="font-size: 64px; margin-bottom: 20px;">📊</div>
+                    <p>上传数据文件后，箱线图将在这里显示</p>
+                    <p style="font-size: 0.9rem; margin-top: 10px;">
+                        异常值将使用红色 X 标记，并标注具体数值
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentFilename = null;
+        let currentImageFilename = null;
+        let currentStatsFilename = null;
+        let numericColumns = [];
+
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function showAlert(message, type) {
+            const errorAlert = document.getElementById('alert-error');
+            const successAlert = document.getElementById('alert-success');
+
+            errorAlert.classList.remove('show');
+            successAlert.classList.remove('show');
+
+            if (type === 'error') {
+                errorAlert.textContent = message;
+                errorAlert.classList.add('show');
+            } else {
+                successAlert.textContent = message;
+                successAlert.classList.add('show');
+            }
+
+            setTimeout(() => {
+                errorAlert.classList.remove('show');
+                successAlert.classList.remove('show');
+            }, 5000);
+        }
+
+        function handleFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            showAlert('正在上传文件...', 'success');
+
+            fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showAlert(data.error, 'error');
+                    return;
+                }
+
+                currentFilename = data.filename;
+                numericColumns = data.numeric_columns;
+
+                document.getElementById('fileName').textContent = data.original_filename;
+                document.getElementById('rowCount').textContent = data.total_rows;
+                document.getElementById('colCount').textContent = data.numeric_columns.length;
+                document.getElementById('fileInfo').classList.add('show');
+
+                renderColumns(data.numeric_columns);
+                renderPreview(data.preview, data.numeric_columns);
+
+                document.getElementById('columnsSection').style.display = 'block';
+                document.getElementById('previewSection').style.display = 'block';
+
+                showAlert('文件上传成功！请选择要分析的列。', 'success');
+            })
+            .catch(error => {
+                showAlert('上传失败: ' + error.message, 'error');
+            });
+        }
+
+        function renderColumns(columns) {
+            const container = document.getElementById('columnsContainer');
+            container.innerHTML = columns.map((col, index) => `
+                <div class="column-item">
+                    <input type="checkbox" id="col_${index}" value="${col}" checked>
+                    <label for="col_${index}">${col}</label>
+                </div>
+            `).join('');
+        }
+
+        function renderPreview(data, columns) {
+            const table = document.getElementById('previewTable');
+            const header = `<tr>${columns.map(col => `<th>${col}</th>`).join('')}</tr>`;
+            const rows = data.map(row =>
+                `<tr>${columns.map(col => `<td>${row[col]}</td>`).join('')}</tr>`
+            ).join('');
+            table.innerHTML = header + rows;
+        }
+
+        function getSelectedColumns() {
+            const checkboxes = document.querySelectorAll('#columnsContainer input[type="checkbox"]:checked');
+            return Array.from(checkboxes).map(cb => cb.value);
+        }
+
+        function generateBoxplot() {
+            const selectedColumns = getSelectedColumns();
+
+            if (selectedColumns.length === 0) {
+                showAlert('请至少选择一列进行分析', 'error');
+                return;
+            }
+
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('generateBtn').disabled = true;
+
+            const title = document.getElementById('chartTitle').value;
+            const showStats = document.getElementById('showStats').checked;
+
+            fetch('/api/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    filename: currentFilename,
+                    columns: selectedColumns,
+                    title: title,
+                    show_stats: showStats
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showAlert(data.error, 'error');
+                    return;
+                }
+
+                currentImageFilename = data.image_filename;
+                currentStatsFilename = data.stats_filename;
+
+                document.getElementById('resultImage').src = data.image_url + '?t=' + Date.now();
+                renderStats(data.stats);
+
+                document.getElementById('emptyState').style.display = 'none';
+                document.getElementById('resultArea').classList.add('show');
+
+                showAlert(`箱线图生成成功！共检测到 ${data.total_outliers} 个异常值。`, 'success');
+            })
+            .catch(error => {
+                showAlert('生成失败: ' + error.message, 'error');
+            })
+            .finally(() => {
+                document.getElementById('loading').classList.remove('show');
+                document.getElementById('generateBtn').disabled = false;
+            });
+        }
+
+        function renderStats(stats) {
+            const container = document.getElementById('statsContainer');
+            container.innerHTML = '<h3 style="color: #333; margin-bottom: 15px;">📊 统计信息</h3>' +
+                stats.map(stat => `
+                    <div class="stats-card">
+                        <h4>${stat.column}</h4>
+                        <p>
+                            <strong>数据量:</strong> ${stat.count} |
+                            <strong>中位数:</strong> ${stat.median.toFixed(2)} |
+                            <strong>范围:</strong> [${stat.min.toFixed(2)}, ${stat.max.toFixed(2)}]<br>
+                            <strong>Q1:</strong> ${stat.q1.toFixed(2)} |
+                            <strong>Q3:</strong> ${stat.q3.toFixed(2)} |
+                            <strong>IQR:</strong> ${stat.iqr.toFixed(2)}<br>
+                            <strong>正常范围:</strong> [${stat.lower_bound.toFixed(2)}, ${stat.upper_bound.toFixed(2)}]
+                        </p>
+                        ${stat.outlier_count > 0 ? `
+                            <span class="outlier-badge">
+                                ⚠️ 检测到 ${stat.outlier_count} 个异常值: ${stat.outliers.map(v => v.toFixed(2)).join(', ')}
+                            </span>
+                        ` : ''}
+                    </div>
+                `).join('');
+        }
+
+        function downloadImage() {
+            if (currentImageFilename) {
+                window.open(`/api/download/${currentImageFilename}`, '_blank');
+            }
+        }
+
+        function downloadStats() {
+            if (currentStatsFilename) {
+                window.open(`/api/download/${currentStatsFilename}`, '_blank');
+            }
+        }
+    </script>
+</body>
+</html>
